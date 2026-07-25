@@ -66,4 +66,22 @@ const config = {
   ],
 };
 
+/**
+ * Preflight-tuned config.
+ *
+ * DA's *native* Preflight (Prepare menu) already checks page title, meta description, a
+ * single H1, broken/unpublished links and leftover placeholder text. Our custom preflight
+ * runs *alongside* native (distinct title), so we drop the overlapping metadata checks here
+ * to avoid double-reporting and keep our value focused on what native does NOT cover:
+ * required blocks, block-field completeness, image alt text and primary-CTA presence.
+ *
+ * The inline validator keeps using the fuller `config` above (default export), since it
+ * runs while editing — before the author ever opens Prepare/Preflight.
+ */
+const NATIVE_METADATA = ['title', 'description'];
+export const preflightConfig = {
+  ...config,
+  requiredMetadata: config.requiredMetadata.filter((f) => !NATIVE_METADATA.includes(f.name)),
+};
+
 export default config;

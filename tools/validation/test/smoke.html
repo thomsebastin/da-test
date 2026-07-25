@@ -71,6 +71,23 @@
       assert('preflight failures are error-severity only', pf.failures.every((i) => i.severity === 'error'));
       assert('preflight passes good page', preflightHtml(goodPage).pass === true);
 
+      // Preflight augments DA's native Preflight rather than duplicating it: native SEO
+      // checks already cover title/description, so our preflight config drops those while
+      // the inline validator (used while editing, before Prepare exists) still flags them.
+      const heroOnlyNoMeta = `<body><main><div>
+        <div class="hero">
+          <div><div><h1>Welcome</h1><p><a href="/start">Get started</a></p></div></div>
+          <div><div><img src="/hero.png" alt="Hero image"></div></div>
+        </div>
+      </div></main></body>`;
+      const inlineOnMissingMeta = validatePage(heroOnlyNoMeta);
+      assert('inline validator flags missing title', inlineOnMissingMeta.issues.some((i) => i.code === 'META_TITLE_MISSING'));
+      assert('inline validator flags missing description', inlineOnMissingMeta.issues.some((i) => i.code === 'META_DESCRIPTION_MISSING'));
+      const preflightOnMissingMeta = preflightHtml(heroOnlyNoMeta);
+      assert('preflight does NOT flag missing title (native SEO covers it)', !preflightOnMissingMeta.issues.some((i) => i.code === 'META_TITLE_MISSING'));
+      assert('preflight does NOT flag missing description (native SEO covers it)', !preflightOnMissingMeta.issues.some((i) => i.code === 'META_DESCRIPTION_MISSING'));
+      assert('preflight still passes when only native-covered metadata is missing', preflightOnMissingMeta.pass === true);
+
       const summary = document.createElement('h2');
       summary.className = failed ? 'fail' : 'pass';
       summary.textContent = failed ? `${failed} test(s) FAILED` : 'ALL TESTS PASSED';

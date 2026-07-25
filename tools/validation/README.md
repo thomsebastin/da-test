@@ -103,21 +103,42 @@ panel with a **Re-check** button.
 
 ## Preflight (Layer 2)
 
-Preflight is the formal **publish gate**. It reuses the exact same engine as the inline
-validator, but frames the result as pass/fail: any `error`-severity issue blocks, and
-`warning`/`info` become advisories. `preflight-panel.js` + `preflight.html` provide a UI;
-`preflight.js` provides the logic.
+Preflight is the formal **publish gate**. It reuses the same engine as the inline validator
+but frames the result as pass/fail: any `error`-severity issue blocks, and `warning`/`info`
+become advisories. `preflight-panel.js` + `preflight.html` provide a UI; `preflight.js`
+provides the logic.
 
-### As a DA plugin
+### Relationship to DA's native Preflight
 
-Register a second **`library`** row alongside the validator:
+DA ships a **native Preflight** in the **Prepare** menu that already checks: broken /
+unpublished links and fragments, leftover placeholder text, and SEO (title, meta
+description, single H1). Our check **augments** it — it runs as a *separate* Prepare item
+(distinct title **"Content Checks"**) and covers what native does not:
 
-| title | path | icon | experience |
+- required blocks are present (e.g. `hero`)
+- block-field completeness (hero heading + image, CTA text + href)
+- image **alt text**
+- primary CTA presence
+
+To avoid double-reporting, the preflight config (`preflightConfig` in `config.js`) drops the
+title/description metadata checks that native SEO already performs. The inline validator
+keeps them, since it runs while editing — before Prepare is ever opened.
+
+### Registering (Prepare menu)
+
+Add a row to the **`prepare`** sheet in the site (or org) config at
+<https://da.live/config#/thomsebastin/da-test/>:
+
+| title | path | icon | ref |
 |---|---|---|---|
-| Preflight | `https://main--da-test--thomsebastin.aem.live/tools/validation/preflight.html` | | dialog |
+| Content Checks | `/tools/validation/preflight` | | main |
 
-Open a page → Library → **Preflight**. It shows a green **Ready to publish** banner, or a red
-**Not ready — N blockers** banner with the must-fix list.
+> Using the title **"Content Checks"** (not "Preflight") makes it appear **alongside** the
+> native Preflight. Registering with the title `Preflight` would *replace* the native check
+> instead — see [Preflight](https://docs.da.live/administrators/guides/prepare-menu/preflight).
+
+Then: open a page → **Prepare** → **Content Checks**. It shows a green **Ready to publish**
+banner, or a red **Not ready — N blockers** banner with the must-fix list.
 
 ### Programmatically
 

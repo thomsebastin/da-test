@@ -13,7 +13,7 @@
  */
 
 import { validatePage } from './validate-page.js';
-import config from './config.js';
+import { preflightConfig } from './config.js';
 
 const ADMIN_ORIGIN = 'https://admin.da.live';
 
@@ -44,7 +44,7 @@ function sourceUrl({
  * @param {import('./config.js').ValidationConfig} [cfg]
  * @returns {PreflightReport}
  */
-export function preflightHtml(html, cfg = config) {
+export function preflightHtml(html, cfg = preflightConfig) {
   const result = validatePage(html, cfg);
   return {
     pass: result.ready,
@@ -61,7 +61,7 @@ export function preflightHtml(html, cfg = config) {
  * @param {import('./config.js').ValidationConfig} [cfg]
  * @returns {Promise<PreflightReport>}
  */
-export async function runPreflight(context, token, cfg = config) {
+export async function runPreflight(context, token, cfg = preflightConfig) {
   const res = await fetch(sourceUrl(context), {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });

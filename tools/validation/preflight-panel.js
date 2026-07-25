@@ -2,7 +2,7 @@
 // eslint-disable-next-line import/no-unresolved
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { runPreflight } from './preflight.js';
-import config from './config.js';
+import { preflightConfig } from './config.js';
 
 const SEVERITY_ICON = { error: '✖', warning: '⚠', info: 'ℹ' };
 
@@ -69,7 +69,7 @@ function renderMessage(text, isError = false) {
 async function run(context, token) {
   renderMessage('Running preflight…');
   try {
-    renderReport(await runPreflight(context, token, config));
+    renderReport(await runPreflight(context, token, preflightConfig));
   } catch (err) {
     renderMessage(err.message || 'Preflight failed', true);
   }
