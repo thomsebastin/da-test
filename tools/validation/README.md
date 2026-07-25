@@ -72,15 +72,24 @@ pageRules: [{ code: 'REQUIRE_PRIMARY_CTA', severity: 'warning' }],
 
 ## Registering the DA plugin
 
-`validation.html` is a standard DA App SDK plugin. Add it to your DA config so it appears
-for authors, e.g. in the library/plugins config sheet:
+`validation.html` is a standard DA App SDK app. Register it in your site config so it shows
+on the DA apps page (org `thomsebastin`, site `da-test`).
 
-| title | path | ref |
-|---|---|---|
-| Validation | `/tools/validation/validation` | (branch) |
+1. Open the site config: <https://da.live/config#/thomsebastin/da-test/>
+2. Add (or edit) the **`apps`** sheet and add a row:
+
+   | title | description | image | path | ref |
+   |---|---|---|---|---|
+   | Content Validation | Checks pages for required content before publish | | `/tools/validation/validation` | main |
+
+3. Save. The app card appears at <https://da.live/apps#/thomsebastin/da-test> and opens at
+   <https://da.live/app/thomsebastin/da-test/tools/validation/validation>.
 
 It loads the current page context from the SDK, fetches source from `admin.da.live`, runs
 the shared validator, and renders a status panel with a **Re-check** button.
+
+> The `apps` sheet columns are `title`, `description`, `image`, `path`, `ref` — see
+> [Developing apps & plugins](https://docs.da.live/developers/guides/developing-apps-and-plugins).
 
 ## Using preflight
 
