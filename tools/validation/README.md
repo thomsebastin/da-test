@@ -72,28 +72,56 @@ pageRules: [{ code: 'REQUIRE_PRIMARY_CTA', severity: 'warning' }],
 
 ## Registering the DA plugin
 
-`validation.html` is a standard DA App SDK app. Register it in your site config so it shows
-on the DA apps page (org `thomsebastin`, site `da-test`).
+`validation.html` is a DA **Library (sidebar) plugin** — it opens beside the document you
+are editing and validates *that* page. It is registered in the **`library`** sheet of the
+site config (org `thomsebastin`, site `da-test`).
 
 1. Open the site config: <https://da.live/config#/thomsebastin/da-test/>
-2. Add (or edit) the **`apps`** sheet and add a row:
+2. Add (or edit) the **`library`** sheet and add a row:
 
-   | title | description | image | path | ref |
-   |---|---|---|---|---|
-   | Content Validation | Checks pages for required content before publish | | `/tools/validation/validation` | main |
+   | title | path | icon | experience |
+   |---|---|---|---|
+   | Content Validation | `https://main--da-test--thomsebastin.aem.live/tools/validation/validation.html` | | dialog |
 
-3. Save. The app card appears at <https://da.live/apps#/thomsebastin/da-test> and opens at
-   <https://da.live/app/thomsebastin/da-test/tools/validation/validation>.
+3. Save. The plugin now appears in the editor's **Library** palette. Open a page in DA, open
+   the Library, and pick **Content Validation** to run it.
 
-It loads the current page context from the SDK, fetches source from `admin.da.live`, runs
-the shared validator, and renders a status panel with a **Re-check** button.
+Notes on the columns (see [Setup library](https://docs.da.live/administrators/guides/setup-library)):
 
-> The `apps` sheet columns are `title`, `description`, `image`, `path`, `ref` — see
-> [Developing apps & plugins](https://docs.da.live/developers/guides/developing-apps-and-plugins).
+- **`path`** is the full URL to the `.html` (the `.html` extension is required). Use the
+  `aem.live` host once the code is on `main`, or `main--da-test--thomsebastin.aem.page` to
+  test from preview.
+- **`experience: dialog`** makes it open as a sidebar panel rather than a fullscreen app.
+- **`icon`** is optional — a full URL to a `.png`.
 
-## Using preflight
+Because it runs against the open document, the SDK provides that page's context; the plugin
+fetches its source from `admin.da.live`, runs the shared validator, and renders a status
+panel with a **Re-check** button.
 
-From a custom DA preflight check, or any pre-publish automation:
+> Do **not** use the `apps` sheet for this — that registers a *fullscreen* app with no open
+> document, so it would try to validate itself instead of the page being edited.
+
+## Preflight (Layer 2)
+
+Preflight is the formal **publish gate**. It reuses the exact same engine as the inline
+validator, but frames the result as pass/fail: any `error`-severity issue blocks, and
+`warning`/`info` become advisories. `preflight-panel.js` + `preflight.html` provide a UI;
+`preflight.js` provides the logic.
+
+### As a DA plugin
+
+Register a second **`library`** row alongside the validator:
+
+| title | path | icon | experience |
+|---|---|---|---|
+| Preflight | `https://main--da-test--thomsebastin.aem.live/tools/validation/preflight.html` | | dialog |
+
+Open a page → Library → **Preflight**. It shows a green **Ready to publish** banner, or a red
+**Not ready — N blockers** banner with the must-fix list.
+
+### Programmatically
+
+For a custom check or any pre-publish automation:
 
 ```js
 import { runPreflight } from '/tools/validation/preflight.js';
@@ -107,6 +135,20 @@ if (!report.pass) {
 
 `preflightHtml(html)` is the pure, network-free variant — handy for tests or when you
 already hold the source HTML.
+
+### Plugin vs. preflight
+
+Both run the same rules, so results never diverge. The difference is intent:
+
+| | Inline validator | Preflight |
+|---|---|---|
+| Purpose | Guidance while editing | Pass/fail gate before publish |
+| Errors | Shown as issues | **Block** readiness |
+| Surface | `validation.html` | `preflight.html` |
+
+Heavier, preflight-only checks from the rollout plan (broken links, template conformity,
+cross-page governance) slot in as new rule evaluators in `rules.js` gated behind a preflight
+config flag — the panel and gate need no changes.
 
 ## Testing
 

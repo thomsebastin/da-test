@@ -18,7 +18,9 @@ const STATUS_LABEL = { ready: 'Ready', warnings: 'Warnings', errors: 'Errors' };
 function sourceUrl({
   org, repo, path, ext,
 }) {
-  const clean = path.replace(/\.[^/.]+$/, '');
+  // The SDK may hand back `path` with or without a leading slash — normalize to exactly
+  // one so we never produce `.../da-testtools/...`.
+  const clean = `/${path}`.replace(/\/+/g, '/').replace(/\.[^/.]+$/, '');
   return `${ADMIN_ORIGIN}/source/${org}/${repo}${clean}.${ext || 'html'}`;
 }
 

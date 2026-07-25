@@ -24,7 +24,8 @@ const ADMIN_ORIGIN = 'https://admin.da.live';
 function sourceUrl({
   org, repo, path, ext,
 }) {
-  const clean = path.replace(/\.[^/.]+$/, '');
+  // Normalize `path` to exactly one leading slash so repo and path never fuse together.
+  const clean = `/${path}`.replace(/\/+/g, '/').replace(/\.[^/.]+$/, '');
   return `${ADMIN_ORIGIN}/source/${org}/${repo}${clean}.${ext || 'html'}`;
 }
 
