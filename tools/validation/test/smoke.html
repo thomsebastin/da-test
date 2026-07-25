@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Validator smoke test</title>
+    <meta charset="utf-8"/>
+    <style>
+      body { font-family: monospace; padding: 16px; }
+      .pass { color: #078d55; }
+      .fail { color: #d31510; font-weight: 700; }
+      pre { background: #f5f5f5; padding: 8px; }
+    </style>
+  </head>
+  <body>
+    <h1>Shared validator smoke test</h1>
+    <div id="out"></div>
+    <script type="module">
+      import { validatePage } from '/tools/validation/validate-page.js';
+      import { preflightHtml } from '/tools/validation/preflight.js';
+
+      const out = document.querySelector('#out');
+      let failed = 0;
+      const assert = (name, cond) => {
+        const el = document.createElement('div');
+        el.className = cond ? 'pass' : 'fail';
+        el.textContent = `${cond ? 'PASS' : 'FAIL'} — ${name}`;
+        out.append(el);
+        if (!cond) failed += 1;
+      };
+
+      // A page that is missing everything required.
+      const emptyPage = '<body><main><div></div></main></body>';
+      const empty = validatePage(emptyPage);
+      assert('empty page is not ready', empty.ready === false);
+      assert('empty page reports missing title', empty.issues.some((i) => i.code === 'META_TITLE_MISSING'));
+      assert('empty page reports missing hero block', empty.issues.some((i) => i.code === 'BLOCK_HERO_MISSING'));
+      assert('empty page status is errors', empty.status === 'errors');
+
+      // A hero present but missing its heading + image.
+      const heroNoFields = `<body><main><div>
+        <div class="hero"><div><div><p>just text</p></div></div></div>
+        <div class="metadata">
+          <div><div>title</div><div>My Page</div></div>
+          <div><div>description</div><div>A description</div></div>
+        </div>
+      </div></main></body>`;
+      const hero = validatePage(heroNoFields);
+      assert('hero missing heading reported', hero.issues.some((i) => i.code === 'HERO_HEADING_MISSING'));
+      assert('hero missing image reported', hero.issues.some((i) => i.code === 'HERO_IMAGE_MISSING'));
+      assert('title present → no META_TITLE_MISSING', !hero.issues.some((i) => i.code === 'META_TITLE_MISSING'));
+
+      // A fully valid page.
+      const goodPage = `<body><main><div>
+        <div class="hero">
+          <div><div><h1>Welcome</h1><p><a href="/start">Get started</a></p></div></div>
+          <div><div><img src="/hero.png" alt="Hero image"></div></div>
+        </div>
+        <div class="metadata">
+          <div><div>title</div><div>My Page</div></div>
+          <div><div>description</div><div>A description</div></div>
+          <div><div>image</div><div><img src="/og.png" alt="og"></div></div>
+        </div>
+      </div></main></body>`;
+      const good = validatePage(goodPage);
+      assert('good page is ready', good.ready === true);
+      assert('good page status ready', good.status === 'ready');
+      assert('good page has no error issues', good.counts.error === 0);
+
+      // Preflight gate mirrors the validator.
+      const pf = preflightHtml(emptyPage);
+      assert('preflight fails empty page', pf.pass === false);
+      assert('preflight failures are error-severity only', pf.failures.every((i) => i.severity === 'error'));
+      assert('preflight passes good page', preflightHtml(goodPage).pass === true);
+
+      const summary = document.createElement('h2');
+      summary.className = failed ? 'fail' : 'pass';
+      summary.textContent = failed ? `${failed} test(s) FAILED` : 'ALL TESTS PASSED';
+      out.prepend(summary);
+      window.__smokeFailed = failed;
+    </script>
+  </body>
+</html>
