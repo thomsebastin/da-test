@@ -3,26 +3,10 @@
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { validatePage } from './validate-page.js';
 import config from './config.js';
-
-const ADMIN_ORIGIN = 'https://admin.da.live';
+import { sourceUrl } from './da-context.js';
 
 const SEVERITY_ICON = { error: '✖', warning: '⚠', info: 'ℹ' };
 const STATUS_LABEL = { ready: 'Ready', warnings: 'Warnings', errors: 'Errors' };
-
-/**
- * Build the admin.da.live source URL for the page currently open in DA.
- * Internal guidance: use admin.da.live (source of truth) rather than content.da.live.
- * @param {{org: string, repo: string, path: string, ext?: string}} context
- * @returns {string}
- */
-function sourceUrl({
-  org, repo, path, ext,
-}) {
-  // The SDK may hand back `path` with or without a leading slash — normalize to exactly
-  // one so we never produce `.../da-testtools/...`.
-  const clean = `/${path}`.replace(/\/+/g, '/').replace(/\.[^/.]+$/, '');
-  return `${ADMIN_ORIGIN}/source/${org}/${repo}${clean}.${ext || 'html'}`;
-}
 
 /**
  * Fetch the current page's source HTML from admin.da.live.

@@ -16,6 +16,7 @@
     <script type="module">
       import { validatePage } from '/tools/validation/validate-page.js';
       import { preflightHtml } from '/tools/validation/preflight.js';
+      import { sourceUrl } from '/tools/validation/da-context.js';
 
       const out = document.querySelector('#out');
       let failed = 0;
@@ -87,6 +88,28 @@
       assert('preflight does NOT flag missing title (native SEO covers it)', !preflightOnMissingMeta.issues.some((i) => i.code === 'META_TITLE_MISSING'));
       assert('preflight does NOT flag missing description (native SEO covers it)', !preflightOnMissingMeta.issues.some((i) => i.code === 'META_DESCRIPTION_MISSING'));
       assert('preflight still passes when only native-covered metadata is missing', preflightOnMissingMeta.pass === true);
+
+      // da-context.js resolves the admin.da.live URL regardless of whether DA sends `site`
+      // or `repo` for the site identifier, and fails loudly (listing received keys) instead
+      // of silently building a broken URL like ".../thomsebastin/undefined/index.html".
+      assert(
+        'sourceUrl resolves the real Prepare-menu context payload',
+        sourceUrl({
+          view: 'edit', org: 'thomsebastin', site: 'da-test', ref: 'main', path: '/index',
+        }) === 'https://admin.da.live/source/thomsebastin/da-test/index.html',
+      );
+      assert(
+        'sourceUrl falls back to context.repo when site is absent',
+        sourceUrl({ org: 'thomsebastin', repo: 'da-test', path: '/index', ext: 'html' })
+          === 'https://admin.da.live/source/thomsebastin/da-test/index.html',
+      );
+      try {
+        sourceUrl({ org: 'thomsebastin', path: '/index' });
+        assert('sourceUrl throws when site/repo is missing', false);
+      } catch (err) {
+        assert('sourceUrl throws when site/repo is missing', /site\/repo/.test(err.message));
+        assert('sourceUrl error lists the keys actually received', /org, path/.test(err.message));
+      }
 
       const summary = document.createElement('h2');
       summary.className = failed ? 'fail' : 'pass';

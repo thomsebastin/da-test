@@ -14,20 +14,7 @@
 
 import { validatePage } from './validate-page.js';
 import { preflightConfig } from './config.js';
-
-const ADMIN_ORIGIN = 'https://admin.da.live';
-
-/**
- * @param {{org: string, repo: string, path: string, ext?: string}} context
- * @returns {string}
- */
-function sourceUrl({
-  org, repo, path, ext,
-}) {
-  // Normalize `path` to exactly one leading slash so repo and path never fuse together.
-  const clean = `/${path}`.replace(/\/+/g, '/').replace(/\.[^/.]+$/, '');
-  return `${ADMIN_ORIGIN}/source/${org}/${repo}${clean}.${ext || 'html'}`;
-}
+import { sourceUrl } from './da-context.js';
 
 /**
  * @typedef {Object} PreflightReport
