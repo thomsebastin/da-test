@@ -15,7 +15,7 @@
     <script type="module">
       import { parseCatalogSheet, findBlockInstance } from '/tools/block-library/parse-library.js';
       import {
-        sourceUrl, sheetUrl, editUrl, resolveLinkedPage,
+        sourceUrl, sheetUrl, editUrl, editUrlForRow, resolveLinkedPage,
       } from '/tools/block-library/da-context.js';
 
       const out = document.querySelector('#out');
@@ -122,14 +122,29 @@
           === 'https://da.live/edit#/thomsebastin/da-test/docs/library/examples/hero-basic',
       );
       assert(
-        'resolveLinkedPage treats an absolute URL as public, no auth needed',
-        resolveLinkedPage({ org: 'thomsebastin', site: 'da-test' }, 'https://content.da.live/thomsebastin/da-test/docs/library/examples/hero-basic.html').needsAuth === false,
+        'resolveLinkedPage rewrites a content.da.live link to an authenticated admin.da.live URL',
+        resolveLinkedPage({ org: 'thomsebastin', site: 'da-test' }, 'https://content.da.live/thomsebastin/da-test/docs/library/blocks/accordion')
+          === 'https://admin.da.live/source/thomsebastin/da-test/docs/library/blocks/accordion.html',
       );
       assert(
-        'resolveLinkedPage resolves a bare DA path via admin.da.live, auth required',
-        resolveLinkedPage({ org: 'thomsebastin', site: 'da-test' }, '/docs/library/examples/hero-basic').url
-          === 'https://admin.da.live/source/thomsebastin/da-test/docs/library/examples/hero-basic.html'
-          && resolveLinkedPage({ org: 'thomsebastin', site: 'da-test' }, '/docs/library/examples/hero-basic').needsAuth === true,
+        'resolveLinkedPage uses the content.da.live URL\'s own org/site, not the current context',
+        resolveLinkedPage({ org: 'other-org', site: 'other-site' }, 'https://content.da.live/thomsebastin/da-test/docs/library/blocks/accordion')
+          === 'https://admin.da.live/source/thomsebastin/da-test/docs/library/blocks/accordion.html',
+      );
+      assert(
+        'resolveLinkedPage resolves a bare DA path against the current context',
+        resolveLinkedPage({ org: 'thomsebastin', site: 'da-test' }, '/docs/library/examples/hero-basic')
+          === 'https://admin.da.live/source/thomsebastin/da-test/docs/library/examples/hero-basic.html',
+      );
+      assert(
+        'editUrlForRow builds an edit URL from a content.da.live link\'s own org/site',
+        editUrlForRow({ org: 'thomsebastin', site: 'da-test' }, 'https://content.da.live/thomsebastin/da-test/docs/library/blocks/accordion')
+          === 'https://da.live/edit#/thomsebastin/da-test/docs/library/blocks/accordion',
+      );
+      assert(
+        'editUrlForRow builds an edit URL for a bare DA path',
+        editUrlForRow({ org: 'thomsebastin', site: 'da-test' }, '/docs/library/examples/hero-basic')
+          === 'https://da.live/edit#/thomsebastin/da-test/docs/library/examples/hero-basic',
       );
       try {
         sourceUrl({ org: 'thomsebastin' }, '/docs/library/blocks');

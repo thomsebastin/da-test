@@ -3,7 +3,7 @@
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { parseCatalogSheet, findBlockInstance } from './parse-library.js';
 import {
-  sourceUrl, sheetUrl, editUrl, resolveLinkedPage,
+  sourceUrl, sheetUrl, editUrlForRow, resolveLinkedPage,
 } from './da-context.js';
 import { getConfig } from './config.js';
 
@@ -29,11 +29,11 @@ async function fetchCatalogJson(context, token, libraryPath) {
 
 /** Fetch a catalog row's linked example page and extract the declared block instance. */
 async function fetchRowInstance(context, token, row) {
-  const { url, needsAuth } = resolveLinkedPage(context, row.path);
+  const url = resolveLinkedPage(context, row.path);
   const res = await fetch(url, {
-    headers: needsAuth && token ? { Authorization: `Bearer ${token}` } : {},
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
-  if (!res.ok) throw new Error(`Could not load example page (${res.status})`);
+  if (!res.ok) throw new Error(`Could not load example page (${res.status}): ${url}`);
   const html = await res.text();
   const instance = findBlockInstance(html, row.name);
   if (!instance) throw new Error(`Block "${row.name}" not found on the linked example page`);
@@ -179,15 +179,13 @@ function openPreview(entry, row, root) {
     const footer = document.createElement('div');
     footer.className = 'bl-modal-footer';
 
-    if (!/^https?:\/\//i.test(row.path)) {
-      const editLink = document.createElement('a');
-      editLink.className = 'bl-link';
-      editLink.href = editUrl(root.context, row.path);
-      editLink.target = '_blank';
-      editLink.rel = 'noopener';
-      editLink.textContent = 'Edit example page';
-      footer.append(editLink);
-    }
+    const editLink = document.createElement('a');
+    editLink.className = 'bl-link';
+    editLink.href = editUrlForRow(root.context, row.path);
+    editLink.target = '_blank';
+    editLink.rel = 'noopener';
+    editLink.textContent = 'Edit example page';
+    footer.append(editLink);
 
     const copyBtn = document.createElement('button');
     copyBtn.type = 'button';

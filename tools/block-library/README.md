@@ -36,9 +36,11 @@ optional heading placed directly above the instance becomes its fallback label w
 sheet row has none.
 
 Nothing is prescribed about the *catalog sheet's* path values either: a bare DA path
-(e.g. `/docs/library/examples/cards-bordered`) is resolved and fetched (authenticated)
-via `admin.da.live/source`; a full `https://content.da.live/...` URL is fetched directly
-(public, no auth) — matching how DA's own `blocks` sub-sheet documentation links examples.
+(e.g. `/docs/library/examples/cards-bordered`) resolves against the current org/site; a
+full `https://content.da.live/{org}/{site}/...` link (DA's own convention for referencing
+a page from a sheet) is rewritten to that org/site's `admin.da.live/source` instead of
+fetched as-is — `content.da.live` needs the same IMS bearer token as `admin.da.live` for
+any non-public org/site, so every request this app makes is authenticated the same way.
 
 ## Files
 
@@ -153,6 +155,7 @@ python3 -m http.server 8899
 
 To exercise the full UI locally (sheet fetch, per-row linked-page fetch, live rendering,
 preview modal, insert action) without a live DA session, stub the DA SDK module and the
-`admin.da.live`/`content.da.live` requests — see the project's Playwright-based
-verification approach for an example of intercepting
-`https://da.live/nx/utils/sdk.js`, the sheet's `.json` source, and each row's linked page.
+`admin.da.live` requests — see the project's Playwright-based verification approach for an
+example of intercepting `https://da.live/nx/utils/sdk.js`, the sheet's `.json` source, and
+each row's rewritten `admin.da.live/source` request (including a `content.da.live`-style
+row, to catch exactly the auth regression this app hit once already).

@@ -61,18 +61,51 @@ export function sheetUrl(context, path) {
   return `${DA_ORIGIN}/sheet#/${org}/${site}${cleanPath(path)}`;
 }
 
+// Matches an authored `https://content.da.live/{org}/{site}/{path}` link, DA's own
+// convention for referencing a page from a sheet (e.g. the `library` `blocks` sub-sheet).
+const CONTENT_LINK_PATTERN = /^https?:\/\/content\.da\.live\/([^/]+)\/([^/]+)\/(.+)$/i;
+
 /**
- * Resolve a catalog row's `path` value to a fetchable URL. Sheets following DA's own
- * `blocks` sub-sheet convention link with a full `https://content.da.live/...` URL (public,
- * unauthenticated); a bare DA path (e.g. `/docs/library/examples/cards-bordered`) is
- * resolved against `admin.da.live/source` instead, same as the catalog sheet itself.
+ * Resolve a catalog row's `path` value to the {context, path} it actually refers to. A
+ * `content.da.live` link names its own org/site explicitly (which may differ from the
+ * current `context` if the sheet links a page in another site); a bare DA path
+ * (e.g. `/docs/library/examples/cards-bordered`) belongs to the current context.
  * @param {object} context DA_SDK context.
- * @param {string} path Absolute URL or DA path from a catalog row.
- * @returns {{url: string, needsAuth: boolean}}
+ * @param {string} path Absolute `content.da.live` URL or bare DA path from a catalog row.
+ * @returns {{context: object, path: string}}
+ */
+function resolveRowLocation(context, path) {
+  const contentMatch = path.match(CONTENT_LINK_PATTERN);
+  if (contentMatch) {
+    const [, org, site, rest] = contentMatch;
+    return { context: { org, site }, path: `/${rest}` };
+  }
+  return { context, path };
+}
+
+/**
+ * Resolve a catalog row's `path` value to an authenticated `admin.da.live/source` URL.
+ * `content.da.live` requires the same IMS bearer token as `admin.da.live` for any
+ * non-public org/site, so a `content.da.live` link is rewritten to `admin.da.live/source`
+ * rather than fetched as-is — that gives it the same proven auth handling as the catalog
+ * sheet fetch, instead of a second, unverified code path.
+ * @param {object} context DA_SDK context.
+ * @param {string} path Absolute `content.da.live` URL or bare DA path from a catalog row.
+ * @returns {string} admin.da.live source URL.
  */
 export function resolveLinkedPage(context, path) {
-  if (/^https?:\/\//i.test(path)) return { url: path, needsAuth: false };
-  return { url: sourceUrl(context, path), needsAuth: true };
+  const loc = resolveRowLocation(context, path);
+  return sourceUrl(loc.context, loc.path);
+}
+
+/**
+ * @param {object} context DA_SDK context.
+ * @param {string} path Absolute `content.da.live` URL or bare DA path from a catalog row.
+ * @returns {string} da.live document-editor URL for that row's example page.
+ */
+export function editUrlForRow(context, path) {
+  const loc = resolveRowLocation(context, path);
+  return editUrl(loc.context, loc.path);
 }
 
 export default sourceUrl;
