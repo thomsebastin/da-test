@@ -216,6 +216,13 @@ button:hover { background: var(--bl-bg-subtle); }
   padding: 4px 8px;
 }
 
+.bl-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
 .bl-preview-frame {
   width: 100%;
   border: none;
@@ -245,8 +252,13 @@ button:hover { background: var(--bl-bg-subtle); }
 
 .bl-modal-footer {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 8px;
   padding: 12px 16px;
   border-top: 1px solid var(--bl-border);
+}
+
+.bl-modal-footer .bl-link {
+  margin-right: auto;
 }

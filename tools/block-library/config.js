@@ -5,14 +5,15 @@
  * (the app is always opened as `da.live/app/{org}/{site}/...` or as a library plugin bound
  * to a document in that org/site), so the same code works unmodified in any org/site.
  *
- * The one thing that *does* vary per site is where the catalog document lives. Default it
+ * The one thing that *does* vary per site is where the catalog sheet lives. Default it
  * here, and allow a `?library=/some/path` override so the same deployed tool can point at a
  * different catalog without a code change (handy when copying this folder into another repo
  * that keeps its examples somewhere else).
  */
 
 const DEFAULT_CONFIG = {
-  // DA path (no extension) to the document authors use to catalog block examples.
+  // DA path (no extension) to the *sheet* listing block names + example page links —
+  // same convention as DA's own `library` `blocks` sub-sheet (columns: name, path).
   libraryPath: '/docs/library/blocks',
 };
 

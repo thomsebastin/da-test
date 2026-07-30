@@ -10,11 +10,13 @@
     </style>
   </head>
   <body>
-    <h1>buildCatalog() smoke test</h1>
+    <h1>parseCatalogSheet() / findBlockInstance() smoke test</h1>
     <div id="out"></div>
     <script type="module">
-      import { buildCatalog } from '/tools/block-library/parse-library.js';
-      import { sourceUrl, editUrl } from '/tools/block-library/da-context.js';
+      import { parseCatalogSheet, findBlockInstance } from '/tools/block-library/parse-library.js';
+      import {
+        sourceUrl, sheetUrl, editUrl, resolveLinkedPage,
+      } from '/tools/block-library/da-context.js';
 
       const out = document.querySelector('#out');
       let failed = 0;
@@ -26,67 +28,83 @@
         if (!cond) failed += 1;
       };
 
-      // Empty document.
-      const empty = buildCatalog('<body><main><div></div></main></body>');
-      assert('empty doc yields no blocks', empty.length === 0);
+      // --- parseCatalogSheet ---
 
-      // One block, no variants, no label.
-      const single = buildCatalog(`<body><main><div>
-        <div class="hero"><div><div><p>content</p></div></div></div>
-      </div></main></body>`);
-      assert('single block detected', single.length === 1);
-      assert('single block name is hero', single[0]?.name === 'hero');
-      assert('single block has one variation', single[0]?.variations.length === 1);
-      assert('variation with no label falls back to null', single[0]?.variations[0].label === null);
+      assert('empty sheet yields no blocks', parseCatalogSheet({ data: [] }).length === 0);
+      assert('missing data array yields no blocks', parseCatalogSheet({}).length === 0);
 
-      // Two variations of the same block, with heading labels, plus variant classes.
-      const withVariants = buildCatalog(`<body><main>
-        <div>
-          <h2>Bordered</h2>
-          <div class="cards bordered"><div><div><p>a</p></div></div></div>
-        </div>
-        <div>
-          <h2>Event</h2>
-          <div class="cards event"><div><div><p>b</p></div></div></div>
-        </div>
-      </main></body>`);
-      assert('two sections grouped under one block name', withVariants.length === 1);
-      assert('cards has two variations', withVariants[0]?.variations.length === 2);
-      assert('first variation label is Bordered', withVariants[0]?.variations[0].label === 'Bordered');
-      assert('first variation variants include bordered', withVariants[0]?.variations[0].variants.includes('bordered'));
-      assert('second variation label is Event', withVariants[0]?.variations[1].label === 'Event');
+      const rowsMissingFields = parseCatalogSheet({
+        data: [
+          { name: 'hero', path: '' },
+          { name: '', path: '/docs/library/examples/x' },
+          { name: 'hero', path: '/docs/library/examples/hero-basic' },
+        ],
+      });
+      assert('rows missing name or path are dropped', rowsMissingFields.length === 1);
+      assert('surviving row keeps its name', rowsMissingFields[0]?.name === 'hero');
 
-      // metadata / section-metadata blocks are excluded.
-      const withMetadata = buildCatalog(`<body><main><div>
-        <div class="hero"><div><div><p>content</p></div></div></div>
-        <div class="metadata"><div><div>title</div><div>My Page</div></div></div>
-        <div class="section-metadata"><div><div>style</div><div>dark</div></div></div>
-      </div></main></body>`);
-      assert('metadata block excluded from catalog', withMetadata.every((b) => b.name !== 'metadata'));
-      assert('section-metadata block excluded from catalog', withMetadata.every((b) => b.name !== 'section-metadata'));
+      const grouped = parseCatalogSheet({
+        data: [
+          { name: 'cards', path: '/docs/library/examples/cards-bordered', label: 'Bordered' },
+          { name: 'cards', path: '/docs/library/examples/cards-event' },
+          { name: 'accordion', path: '/docs/library/examples/accordion-basic' },
+        ],
+      });
+      assert('two distinct block names', grouped.length === 2);
+      assert('catalog sorted alphabetically', grouped.map((b) => b.name).join(',') === 'accordion,cards');
+      assert('cards has two rows (variations)', grouped.find((b) => b.name === 'cards').rows.length === 2);
+      assert('row label read from sheet', grouped.find((b) => b.name === 'cards').rows[0].label === 'Bordered');
+      assert('row without label column is null', grouped.find((b) => b.name === 'cards').rows[1].label === null);
+      assert(
+        'description column used as label fallback',
+        parseCatalogSheet({ data: [{ name: 'hero', path: '/x', description: 'Basic hero' }] })[0].rows[0].label === 'Basic hero',
+      );
 
-      // Block config (key/value rows) is read from the instance.
-      const withConfig = buildCatalog(`<body><main><div>
+      // --- findBlockInstance ---
+
+      const noMatch = findBlockInstance('<body><main><div><div class="hero"><div><div><p>hi</p></div></div></div></div></main></body>', 'cards');
+      assert('no matching block returns null', noMatch === null);
+
+      const heroPage = `<body><main><div>
+        <h2>Basic hero</h2>
+        <div class="hero"><div><div><h1>Welcome</h1></div></div></div>
+      </div></main></body>`;
+      const hero = findBlockInstance(heroPage, 'hero');
+      assert('matching block found', hero !== null);
+      assert('found block has correct name', hero.name === 'hero');
+      assert('found block has no variants', hero.variants.length === 0);
+      assert('found block picks up nearest heading as label', hero.label === 'Basic hero');
+      assert('found block html is the outerHTML of the instance', hero.html.includes('Welcome'));
+
+      const variantPage = `<body><main><div>
+        <div class="cards bordered dark"><div><div><p>a</p></div></div></div>
+      </div></main></body>`;
+      const variant = findBlockInstance(variantPage, 'cards');
+      assert('variant classes captured in order', variant.variants.join(',') === 'bordered,dark');
+
+      const configPage = `<body><main><div>
         <div class="cta">
           <div><div>text</div><div>Learn more</div></div>
           <div><div>href</div><div>/learn-more</div></div>
         </div>
-      </div></main></body>`);
-      assert('block config text read', withConfig[0]?.variations[0].config.text === 'Learn more');
-      assert('block config href read', withConfig[0]?.variations[0].config.href === '/learn-more');
+      </div></main></body>`;
+      const cta = findBlockInstance(configPage, 'cta');
+      assert('block config text read', cta.config.text === 'Learn more');
+      assert('block config href read', cta.config.href === '/learn-more');
 
-      // Multiple distinct block names sort alphabetically.
-      const multi = buildCatalog(`<body><main>
-        <div><div class="tabs"><div><div>a</div></div></div></div>
-        <div><div class="accordion"><div><div>a</div></div></div></div>
-      </main></body>`);
-      assert('catalog sorted alphabetically', multi.map((b) => b.name).join(',') === 'accordion,tabs');
+      // Only the first matching instance on a page is returned.
+      const twoInstances = findBlockInstance(`<body><main>
+        <div><div class="quote"><div><div><p>first</p></div></div></div></div>
+        <div><div class="quote"><div><div><p>second</p></div></div></div></div>
+      </main></body>`, 'quote');
+      assert('first matching instance wins when a page has more than one', twoInstances.html.includes('first'));
 
-      // da-context.js resolves URLs for an arbitrary path, independent of context.path.
+      // --- da-context.js ---
+
       assert(
         'sourceUrl builds admin.da.live URL for a fixed catalog path',
-        sourceUrl({ org: 'thomsebastin', site: 'da-test' }, '/docs/library/blocks')
-          === 'https://admin.da.live/source/thomsebastin/da-test/docs/library/blocks.html',
+        sourceUrl({ org: 'thomsebastin', site: 'da-test' }, '/docs/library/blocks', 'json')
+          === 'https://admin.da.live/source/thomsebastin/da-test/docs/library/blocks.json',
       );
       assert(
         'sourceUrl falls back to context.repo when site is absent',
@@ -94,9 +112,24 @@
           === 'https://admin.da.live/source/thomsebastin/da-test/docs/library/blocks.html',
       );
       assert(
-        'editUrl builds a da.live edit URL',
-        editUrl({ org: 'thomsebastin', site: 'da-test' }, '/docs/library/blocks')
-          === 'https://da.live/edit#/thomsebastin/da-test/docs/library/blocks',
+        'sheetUrl builds a da.live sheet-editor URL',
+        sheetUrl({ org: 'thomsebastin', site: 'da-test' }, '/docs/library/blocks')
+          === 'https://da.live/sheet#/thomsebastin/da-test/docs/library/blocks',
+      );
+      assert(
+        'editUrl builds a da.live document-editor URL',
+        editUrl({ org: 'thomsebastin', site: 'da-test' }, '/docs/library/examples/hero-basic')
+          === 'https://da.live/edit#/thomsebastin/da-test/docs/library/examples/hero-basic',
+      );
+      assert(
+        'resolveLinkedPage treats an absolute URL as public, no auth needed',
+        resolveLinkedPage({ org: 'thomsebastin', site: 'da-test' }, 'https://content.da.live/thomsebastin/da-test/docs/library/examples/hero-basic.html').needsAuth === false,
+      );
+      assert(
+        'resolveLinkedPage resolves a bare DA path via admin.da.live, auth required',
+        resolveLinkedPage({ org: 'thomsebastin', site: 'da-test' }, '/docs/library/examples/hero-basic').url
+          === 'https://admin.da.live/source/thomsebastin/da-test/docs/library/examples/hero-basic.html'
+          && resolveLinkedPage({ org: 'thomsebastin', site: 'da-test' }, '/docs/library/examples/hero-basic').needsAuth === true,
       );
       try {
         sourceUrl({ org: 'thomsebastin' }, '/docs/library/blocks');
