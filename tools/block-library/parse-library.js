@@ -54,26 +54,29 @@ function nearestLabel(block) {
 
 /**
  * Parse the catalog sheet's JSON (as returned by `admin.da.live/source/.../*.json`) into
- * rows, grouped by block name. Rows missing a `name` or `path` are dropped.
+ * rows, grouped by block name. Grouped case/punctuation-insensitively via `toKey` (so
+ * "Table" and "table" merge into one entry, same normalization `findBlockInstance` uses
+ * to match a row's name against the block class actually authored on its example page),
+ * using the first-seen casing as the display name. Rows missing a `name` or `path` are
+ * dropped.
  * @param {object} json Sheet JSON — expects a `data` array of row objects.
  * @returns {Array<{name: string, rows: CatalogRow[]}>} Sorted alphabetically by name.
  */
 export function parseCatalogSheet(json) {
   const data = Array.isArray(json?.data) ? json.data : [];
-  const byName = new Map();
+  const byKey = new Map();
 
   data.forEach((row) => {
     const name = (row.name || '').trim();
     const path = (row.path || '').trim();
     if (!name || !path) return;
     const label = (row.label || row.description || '').trim() || null;
-    if (!byName.has(name)) byName.set(name, []);
-    byName.get(name).push({ name, path, label });
+    const key = toKey(name);
+    if (!byKey.has(key)) byKey.set(key, { name, rows: [] });
+    byKey.get(key).rows.push({ name, path, label });
   });
 
-  return [...byName.entries()]
-    .map(([name, rows]) => ({ name, rows }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /**
@@ -86,7 +89,10 @@ export function parseCatalogSheet(json) {
  */
 
 /**
- * Find the first instance of `expectedName` on an example page.
+ * Find the first instance of `expectedName` on an example page. Matched case- and
+ * punctuation-insensitively via `toKey` (EDS `toClassName` semantics): a sheet's `name`
+ * column is typically authored as a display name (e.g. "Table"), while the actual class
+ * on the page is the block-table conversion of that name (e.g. `table`).
  * @param {string} html Raw source HTML of the linked example page.
  * @param {string} expectedName Block name declared for this row in the catalog sheet.
  * @returns {BlockInstance|null} `null` when no matching block is found on the page.
@@ -94,6 +100,7 @@ export function parseCatalogSheet(json) {
 export function findBlockInstance(html, expectedName) {
   const doc = new DOMParser().parseFromString(html || '', 'text/html');
   const root = doc.querySelector('main') || doc.body;
+  const expectedKey = toKey(expectedName);
 
   const sections = [...root.querySelectorAll(':scope > div')];
   for (let s = 0; s < sections.length; s += 1) {
@@ -101,7 +108,7 @@ export function findBlockInstance(html, expectedName) {
     for (let b = 0; b < blocks.length; b += 1) {
       const block = blocks[b];
       const [name, ...variants] = [...block.classList];
-      if (name === expectedName) {
+      if (toKey(name) === expectedKey) {
         return {
           name,
           variants,

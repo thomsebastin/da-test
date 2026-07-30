@@ -60,10 +60,29 @@
         parseCatalogSheet({ data: [{ name: 'hero', path: '/x', description: 'Basic hero' }] })[0].rows[0].label === 'Basic hero',
       );
 
+      // Rows differing only in case merge into one block entry (e.g. a sheet authored
+      // with a display name like "Table" alongside a lowercase variant row).
+      const caseMerged = parseCatalogSheet({
+        data: [
+          { name: 'Table', path: '/docs/library/examples/table-basic' },
+          { name: 'table', path: '/docs/library/examples/table-striped' },
+        ],
+      });
+      assert('differently-cased rows merge into one block entry', caseMerged.length === 1);
+      assert('merged entry keeps the first-seen casing as display name', caseMerged[0].name === 'Table');
+      assert('merged entry has both rows', caseMerged[0].rows.length === 2);
+
       // --- findBlockInstance ---
 
       const noMatch = findBlockInstance('<body><main><div><div class="hero"><div><div><p>hi</p></div></div></div></div></main></body>', 'cards');
       assert('no matching block returns null', noMatch === null);
+
+      // A sheet row named "Table" (a display name) must still match the block class
+      // actually authored on the page, which EDS's own toClassName lowercases to "table".
+      const tablePage = '<body><main><div><div class="table"><div><div><p>cell</p></div></div></div></div></main></body>';
+      const tableMatch = findBlockInstance(tablePage, 'Table');
+      assert('block name matching is case-insensitive', tableMatch !== null);
+      assert('case-insensitive match keeps the page\'s actual class as name', tableMatch?.name === 'table');
 
       const heroPage = `<body><main><div>
         <h2>Basic hero</h2>
