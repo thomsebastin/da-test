@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Block Library parser smoke test</title>
+    <meta charset="utf-8"/>
+    <style>
+      body { font-family: monospace; padding: 16px; }
+      .pass { color: #078d55; }
+      .fail { color: #d31510; font-weight: 700; }
+    </style>
+  </head>
+  <body>
+    <h1>buildCatalog() smoke test</h1>
+    <div id="out"></div>
+    <script type="module">
+      import { buildCatalog } from '/tools/block-library/parse-library.js';
+      import { sourceUrl, editUrl } from '/tools/block-library/da-context.js';
+
+      const out = document.querySelector('#out');
+      let failed = 0;
+      const assert = (name, cond) => {
+        const el = document.createElement('div');
+        el.className = cond ? 'pass' : 'fail';
+        el.textContent = `${cond ? 'PASS' : 'FAIL'} — ${name}`;
+        out.append(el);
+        if (!cond) failed += 1;
+      };
+
+      // Empty document.
+      const empty = buildCatalog('<body><main><div></div></main></body>');
+      assert('empty doc yields no blocks', empty.length === 0);
+
+      // One block, no variants, no label.
+      const single = buildCatalog(`<body><main><div>
+        <div class="hero"><div><div><p>content</p></div></div></div>
+      </div></main></body>`);
+      assert('single block detected', single.length === 1);
+      assert('single block name is hero', single[0]?.name === 'hero');
+      assert('single block has one variation', single[0]?.variations.length === 1);
+      assert('variation with no label falls back to null', single[0]?.variations[0].label === null);
+
+      // Two variations of the same block, with heading labels, plus variant classes.
+      const withVariants = buildCatalog(`<body><main>
+        <div>
+          <h2>Bordered</h2>
+          <div class="cards bordered"><div><div><p>a</p></div></div></div>
+        </div>
+        <div>
+          <h2>Event</h2>
+          <div class="cards event"><div><div><p>b</p></div></div></div>
+        </div>
+      </main></body>`);
+      assert('two sections grouped under one block name', withVariants.length === 1);
+      assert('cards has two variations', withVariants[0]?.variations.length === 2);
+      assert('first variation label is Bordered', withVariants[0]?.variations[0].label === 'Bordered');
+      assert('first variation variants include bordered', withVariants[0]?.variations[0].variants.includes('bordered'));
+      assert('second variation label is Event', withVariants[0]?.variations[1].label === 'Event');
+
+      // metadata / section-metadata blocks are excluded.
+      const withMetadata = buildCatalog(`<body><main><div>
+        <div class="hero"><div><div><p>content</p></div></div></div>
+        <div class="metadata"><div><div>title</div><div>My Page</div></div></div>
+        <div class="section-metadata"><div><div>style</div><div>dark</div></div></div>
+      </div></main></body>`);
+      assert('metadata block excluded from catalog', withMetadata.every((b) => b.name !== 'metadata'));
+      assert('section-metadata block excluded from catalog', withMetadata.every((b) => b.name !== 'section-metadata'));
+
+      // Block config (key/value rows) is read from the instance.
+      const withConfig = buildCatalog(`<body><main><div>
+        <div class="cta">
+          <div><div>text</div><div>Learn more</div></div>
+          <div><div>href</div><div>/learn-more</div></div>
+        </div>
+      </div></main></body>`);
+      assert('block config text read', withConfig[0]?.variations[0].config.text === 'Learn more');
+      assert('block config href read', withConfig[0]?.variations[0].config.href === '/learn-more');
+
+      // Multiple distinct block names sort alphabetically.
+      const multi = buildCatalog(`<body><main>
+        <div><div class="tabs"><div><div>a</div></div></div></div>
+        <div><div class="accordion"><div><div>a</div></div></div></div>
+      </main></body>`);
+      assert('catalog sorted alphabetically', multi.map((b) => b.name).join(',') === 'accordion,tabs');
+
+      // da-context.js resolves URLs for an arbitrary path, independent of context.path.
+      assert(
+        'sourceUrl builds admin.da.live URL for a fixed catalog path',
+        sourceUrl({ org: 'thomsebastin', site: 'da-test' }, '/docs/library/blocks')
+          === 'https://admin.da.live/source/thomsebastin/da-test/docs/library/blocks.html',
+      );
+      assert(
+        'sourceUrl falls back to context.repo when site is absent',
+        sourceUrl({ org: 'thomsebastin', repo: 'da-test' }, '/docs/library/blocks')
+          === 'https://admin.da.live/source/thomsebastin/da-test/docs/library/blocks.html',
+      );
+      assert(
+        'editUrl builds a da.live edit URL',
+        editUrl({ org: 'thomsebastin', site: 'da-test' }, '/docs/library/blocks')
+          === 'https://da.live/edit#/thomsebastin/da-test/docs/library/blocks',
+      );
+      try {
+        sourceUrl({ org: 'thomsebastin' }, '/docs/library/blocks');
+        assert('sourceUrl throws when site/repo is missing', false);
+      } catch (err) {
+        assert('sourceUrl throws when site/repo is missing', /org\/site/.test(err.message));
+      }
+
+      const summary = document.createElement('h2');
+      summary.className = failed ? 'fail' : 'pass';
+      summary.textContent = failed ? `${failed} test(s) FAILED` : 'ALL TESTS PASSED';
+      out.prepend(summary);
+      window.__smokeFailed = failed;
+    </script>
+  </body>
+</html>

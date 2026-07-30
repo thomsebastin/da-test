@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Block Library</title>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <link rel="icon" href="data:,">
+    <!-- Import DA App SDK -->
+    <script src="https://da.live/nx/utils/sdk.js" type="module"></script>
+    <!-- App logic -->
+    <script src="/tools/block-library/block-library.js" type="module"></script>
+    <!-- Adobe Clean, matching the other tools in this project -->
+    <link rel="stylesheet" href="https://use.typekit.net/hah7vzn.css">
+    <link rel="stylesheet" href="/tools/block-library/block-library.css">
+  </head>
+  <body>
+    <header class="bl-header">
+      <h1>Block Library</h1>
+      <div class="bl-header-actions">
+        <a id="bl-source-link" class="bl-link" href="#" target="_blank" rel="noopener">Edit catalog</a>
+        <button id="bl-refresh" type="button">Refresh</button>
+      </div>
+    </header>
+    <div id="bl-app" class="bl-app">
+      <p class="bl-status">Loading block library…</p>
+    </div>
+  </body>
+</html>
