@@ -11,7 +11,14 @@ const app = document.querySelector('#bl-app');
 const sourceLink = document.querySelector('#bl-source-link');
 const refreshBtn = document.querySelector('#bl-refresh');
 
-let state = { catalog: [], selectedName: null };
+// `expanded` tracks which block names are open in the sidebar; `preview` tracks the
+// currently previewed row: { entry, row, status: 'loading'|'ready'|'error', instance?, error? }
+let state = { catalog: [], expanded: new Set(), preview: null };
+
+// Only one preview iframe is ever live at a time, so its message listener is tracked here
+// and torn down before the next one is wired up (rather than per-modal, since the panel —
+// and its iframe — now persist across renders instead of being created/destroyed).
+let teardownPreviewListener = null;
 
 /** Fetch the catalog sheet's JSON from admin.da.live. */
 async function fetchCatalogJson(context, token, libraryPath) {
@@ -40,179 +47,195 @@ async function fetchRowInstance(context, token, row) {
   return instance;
 }
 
-/** Prettify the last path segment as a fallback card label when a row has none. */
+/** Prettify the last path segment as a fallback label when a row has none. */
 function basenameLabel(path) {
   const clean = path.replace(/^https?:\/\/[^/]+/, '').replace(/\.[^/.]+$/, '');
   const last = clean.split('/').filter(Boolean).pop() || 'default';
   return last.replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function cardLabel(row) {
+function rowLabel(row) {
   return row.label || basenameLabel(row.path);
 }
 
-function modalLabel(row, instance) {
+function previewLabel(row, instance) {
   if (row.label) return row.label;
   if (instance?.label) return instance.label;
   if (instance?.variants.length) return instance.variants.join(', ');
   return basenameLabel(row.path);
 }
 
-/** Render the sidebar list of discovered block names. */
+/** Select a row for preview and fetch its example lazily. */
+function selectVariation(entry, row, root) {
+  state.preview = {
+    entry, row, status: 'loading',
+  };
+  // eslint-disable-next-line no-use-before-define
+  render(root);
+
+  fetchRowInstance(root.context, root.token, row).then((instance) => {
+    state.preview = {
+      entry, row, status: 'ready', instance,
+    };
+    // eslint-disable-next-line no-use-before-define
+    render(root);
+  }).catch((err) => {
+    state.preview = {
+      entry, row, status: 'error', error: err.message,
+    };
+    // eslint-disable-next-line no-use-before-define
+    render(root);
+  });
+}
+
+/** Render the sidebar: each block toggles open to reveal its variations inline. */
 function renderNav(root) {
   const nav = document.createElement('nav');
   nav.className = 'bl-nav';
   const list = document.createElement('ul');
-  state.catalog.forEach(({ name, rows }) => {
+
+  state.catalog.forEach((entry) => {
     const li = document.createElement('li');
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'bl-nav-item';
-    btn.classList.toggle('is-active', state.selectedName === name);
-    btn.innerHTML = `<span class="bl-nav-name">${name}</span><span class="bl-nav-count">${rows.length}</span>`;
-    btn.addEventListener('click', () => {
-      state.selectedName = name;
+    li.className = 'bl-block';
+    const isExpanded = state.expanded.has(entry.name);
+
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'bl-block-toggle';
+    toggle.setAttribute('aria-expanded', String(isExpanded));
+    toggle.innerHTML = `
+      <span class="bl-block-caret" aria-hidden="true">${isExpanded ? '▾' : '▸'}</span>
+      <span class="bl-block-name">${entry.name}</span>
+      <span class="bl-nav-count">${entry.rows.length}</span>
+    `;
+    toggle.addEventListener('click', () => {
+      if (isExpanded) state.expanded.delete(entry.name);
+      else state.expanded.add(entry.name);
       // eslint-disable-next-line no-use-before-define
       render(root);
     });
-    li.append(btn);
+    li.append(toggle);
+
+    if (isExpanded) {
+      const variationList = document.createElement('ul');
+      variationList.className = 'bl-variation-list';
+      entry.rows.forEach((row) => {
+        const vLi = document.createElement('li');
+        const vBtn = document.createElement('button');
+        vBtn.type = 'button';
+        vBtn.className = 'bl-variation-item';
+        vBtn.classList.toggle(
+          'is-active',
+          state.preview?.entry === entry && state.preview?.row === row,
+        );
+        vBtn.textContent = rowLabel(row);
+        vBtn.addEventListener('click', () => selectVariation(entry, row, root));
+        vLi.append(vBtn);
+        variationList.append(vLi);
+      });
+      li.append(variationList);
+    }
+
     list.append(li);
   });
+
   nav.append(list);
   return nav;
 }
 
-/** Render the grid of variation cards (one per sheet row) for the selected block. */
-function renderVariations(root) {
+/** Render the right-hand preview panel for the currently selected variation, if any. */
+function renderPreviewPanel(root) {
   const section = document.createElement('section');
-  section.className = 'bl-variations';
+  section.className = 'bl-preview-panel';
 
-  const entry = state.catalog.find((b) => b.name === state.selectedName);
-  if (!entry) {
-    section.innerHTML = '<p class="bl-status">Select a block from the list to see its variations.</p>';
+  const { preview } = state;
+  if (!preview) {
+    section.innerHTML = '<p class="bl-status">Select a variation from the list to preview it here.</p>';
     return section;
   }
 
-  const h2 = document.createElement('h2');
-  h2.textContent = entry.name;
-  section.append(h2);
+  const { entry, row, status } = preview;
+  const title = document.createElement('h2');
+  title.className = 'bl-preview-title';
+  title.textContent = `${entry.name} — ${status === 'ready' ? previewLabel(row, preview.instance) : rowLabel(row)}`;
+  section.append(title);
 
-  const grid = document.createElement('div');
-  grid.className = 'bl-grid';
-  entry.rows.forEach((row) => {
-    const card = document.createElement('button');
-    card.type = 'button';
-    card.className = 'bl-card';
-    card.innerHTML = `<span class="bl-card-title">${cardLabel(row)}</span>`;
-    // eslint-disable-next-line no-use-before-define
-    card.addEventListener('click', () => openPreview(entry, row, root));
-    grid.append(card);
-  });
-  section.append(grid);
-  return section;
-}
+  if (status === 'loading') {
+    const p = document.createElement('p');
+    p.className = 'bl-status';
+    p.textContent = 'Loading example…';
+    section.append(p);
+    return section;
+  }
 
-/** Open the click-to-preview modal for one catalog row, fetching its example lazily. */
-function openPreview(entry, row, root) {
-  const overlay = document.createElement('div');
-  overlay.className = 'bl-modal-overlay';
+  if (status === 'error') {
+    const p = document.createElement('p');
+    p.className = 'bl-status bl-status-error';
+    p.textContent = preview.error;
+    section.append(p);
+    return section;
+  }
 
-  const modal = document.createElement('div');
-  modal.className = 'bl-modal';
+  const { instance } = preview;
 
-  const header = document.createElement('div');
-  header.className = 'bl-modal-header';
-  header.innerHTML = `<h3>${entry.name} — ${cardLabel(row)}</h3>`;
-  const closeBtn = document.createElement('button');
-  closeBtn.type = 'button';
-  closeBtn.className = 'bl-modal-close';
-  closeBtn.setAttribute('aria-label', 'Close preview');
-  closeBtn.textContent = '✕';
-  header.append(closeBtn);
+  const iframe = document.createElement('iframe');
+  iframe.className = 'bl-preview-frame';
+  iframe.title = `Preview: ${entry.name} — ${previewLabel(row, instance)}`;
+  iframe.src = './preview.html';
 
-  const body = document.createElement('div');
-  body.className = 'bl-modal-body';
-  body.innerHTML = '<p class="bl-status">Loading example…</p>';
-
-  modal.append(header, body);
-  overlay.append(modal);
-
-  let onMessage;
-  const close = () => {
-    if (onMessage) window.removeEventListener('message', onMessage);
-    overlay.remove();
+  if (teardownPreviewListener) teardownPreviewListener();
+  const onMessage = (e) => {
+    if (e.source !== iframe.contentWindow) return;
+    if (e.data?.type === 'block-library-preview-ready') {
+      iframe.contentWindow.postMessage(
+        { type: 'block-library-render', html: instance.html },
+        window.location.origin,
+      );
+    }
+    if (e.data?.type === 'block-library-preview-height') {
+      iframe.style.height = `${Math.max(120, e.data.height)}px`;
+    }
   };
-  closeBtn.addEventListener('click', close);
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
-  document.addEventListener('keydown', function onKey(e) {
-    if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); }
+  window.addEventListener('message', onMessage);
+  teardownPreviewListener = () => window.removeEventListener('message', onMessage);
+
+  const details = document.createElement('details');
+  details.className = 'bl-raw-html';
+  details.innerHTML = '<summary>View HTML</summary><pre><code></code></pre>';
+  details.querySelector('code').textContent = instance.html;
+
+  const footer = document.createElement('div');
+  footer.className = 'bl-preview-footer';
+
+  const editLink = document.createElement('a');
+  editLink.className = 'bl-link';
+  editLink.href = editUrlForRow(root.context, row.path);
+  editLink.target = '_blank';
+  editLink.rel = 'noopener';
+  editLink.textContent = 'Edit example page';
+
+  const copyBtn = document.createElement('button');
+  copyBtn.type = 'button';
+  copyBtn.textContent = 'Copy HTML';
+  copyBtn.addEventListener('click', async () => {
+    await navigator.clipboard.writeText(instance.html);
+    copyBtn.textContent = 'Copied!';
+    window.setTimeout(() => { copyBtn.textContent = 'Copy HTML'; }, 1500);
   });
-  document.body.append(overlay);
 
-  fetchRowInstance(root.context, root.token, row).then((instance) => {
-    header.querySelector('h3').textContent = `${entry.name} — ${modalLabel(row, instance)}`;
-
-    const iframe = document.createElement('iframe');
-    iframe.className = 'bl-preview-frame';
-    iframe.title = `Preview: ${entry.name} — ${modalLabel(row, instance)}`;
-    iframe.src = './preview.html';
-
-    onMessage = (e) => {
-      if (e.source !== iframe.contentWindow) return;
-      if (e.data?.type === 'block-library-preview-ready') {
-        iframe.contentWindow.postMessage(
-          { type: 'block-library-render', html: instance.html },
-          window.location.origin,
-        );
-      }
-      if (e.data?.type === 'block-library-preview-height') {
-        iframe.style.height = `${Math.max(120, e.data.height)}px`;
-      }
-    };
-    window.addEventListener('message', onMessage);
-
-    const details = document.createElement('details');
-    details.className = 'bl-raw-html';
-    details.innerHTML = '<summary>View HTML</summary><pre><code></code></pre>';
-    details.querySelector('code').textContent = instance.html;
-
-    const footer = document.createElement('div');
-    footer.className = 'bl-modal-footer';
-
-    const editLink = document.createElement('a');
-    editLink.className = 'bl-link';
-    editLink.href = editUrlForRow(root.context, row.path);
-    editLink.target = '_blank';
-    editLink.rel = 'noopener';
-    editLink.textContent = 'Edit example page';
-    footer.append(editLink);
-
-    const copyBtn = document.createElement('button');
-    copyBtn.type = 'button';
-    copyBtn.textContent = 'Copy HTML';
-    copyBtn.addEventListener('click', async () => {
-      await navigator.clipboard.writeText(instance.html);
-      copyBtn.textContent = 'Copied!';
-      window.setTimeout(() => { copyBtn.textContent = 'Copy HTML'; }, 1500);
-    });
-
-    const insertBtn = document.createElement('button');
-    insertBtn.type = 'button';
-    insertBtn.className = 'bl-btn-primary';
-    insertBtn.textContent = 'Insert into open document';
-    insertBtn.title = 'Only takes effect when opened as a library plugin alongside a document';
-    insertBtn.addEventListener('click', () => {
-      root.actions.sendHTML(instance.html);
-      root.actions.closeLibrary();
-    });
-
-    footer.append(copyBtn, insertBtn);
-
-    body.innerHTML = '';
-    body.append(iframe, details, footer);
-  }).catch((err) => {
-    body.innerHTML = `<p class="bl-status bl-status-error">${err.message}</p>`;
+  const insertBtn = document.createElement('button');
+  insertBtn.type = 'button';
+  insertBtn.className = 'bl-btn-primary';
+  insertBtn.textContent = 'Insert into open document';
+  insertBtn.title = 'Only takes effect when opened as a library plugin alongside a document';
+  insertBtn.addEventListener('click', () => {
+    root.actions.sendHTML(instance.html);
+    root.actions.closeLibrary();
   });
+
+  footer.append(editLink, copyBtn, insertBtn);
+  section.append(iframe, details, footer);
+  return section;
 }
 
 function renderEmptyState(context, libraryPath, message) {
@@ -241,7 +264,7 @@ function render(root) {
   app.innerHTML = '';
   const layout = document.createElement('div');
   layout.className = 'bl-layout';
-  layout.append(renderNav(root), renderVariations(root));
+  layout.append(renderNav(root), renderPreviewPanel(root));
   app.append(layout);
 }
 
@@ -254,7 +277,7 @@ async function load(context, token, actions, libraryPath) {
       renderEmptyState(context, libraryPath, 'No blocks found in the catalog sheet yet.');
       return;
     }
-    state = { catalog, selectedName: catalog[0].name };
+    state = { catalog, expanded: new Set(), preview: null };
     render({
       context, token, actions,
     });

@@ -12,6 +12,11 @@ import {
   decorateButtons, decorateIcons, decorateBlock, loadBlock, loadCSS,
 } from '../../scripts/aem.js';
 
+// styles.css hides <body> until this class is added (the same FOUC guard scripts.js
+// applies via loadEager) — skipped here since this harness deliberately doesn't run the
+// full page lifecycle, so without it every preview would render invisibly.
+document.body.classList.add('appear');
+
 const mount = document.querySelector('main .section');
 
 function reportHeight() {
